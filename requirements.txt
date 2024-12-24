@@ -1,0 +1,3 @@
+pickle
+face-recognition
+fastapi
