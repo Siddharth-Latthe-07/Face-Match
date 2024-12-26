@@ -1,4 +1,5 @@
 pickle
 face-recognition
+python-multipart
 fastapi
 uvicorn
