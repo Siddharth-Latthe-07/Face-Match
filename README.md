@@ -9,7 +9,7 @@ pip install -r requirements.txt
 
 3. run the command to run the application:-
 ```
-uvicorn face_match_api:app --reload
+uvicorn face-match-api:app --reload
 ```
 4. Use the curl command to test the application:-
    A. /generate-encodings
