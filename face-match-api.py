@@ -1,11 +1,8 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import JSONResponse
 import face_recognition
 import pickle
 import os
 import numpy as np
-from PIL import Image
-OUTPUT_DIR = "./output"
 
 app = FastAPI()
 
@@ -37,14 +34,13 @@ async def generate_encodings_endpoint():
         pickle.dump({"encodings": encodings, "images": images}, file)
     return {"message": "Encodings generated and saved successfully!"}
 
-# Combined endpoint: Upload image, find match, save output
+# Endpoint to upload and match
 @app.post("/upload-and-match")
 async def upload_and_match(file: UploadFile = File(...)):
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
     if not os.path.exists(ENCODINGS_FILE):
         raise HTTPException(status_code=400, detail="Encodings file not found. Generate encodings first.")
 
-   
+    # Load precomputed encodings
     with open(ENCODINGS_FILE, "rb") as f:
         data = pickle.load(f)
 
@@ -53,39 +49,38 @@ async def upload_and_match(file: UploadFile = File(...)):
 
     # Load user image
     image_data = await file.read()
-    uploaded_image_path = os.path.join(OUTPUT_DIR, "uploaded_image.jpg")
-    with open(uploaded_image_path, "wb") as temp_file:
+    with open("temp_uploaded_image.jpg", "wb") as temp_file:
         temp_file.write(image_data)
-    user_image = face_recognition.load_image_file(uploaded_image_path)
+    user_image = face_recognition.load_image_file("temp_uploaded_image.jpg")
 
     user_face_locations = face_recognition.face_locations(user_image)
     if len(user_face_locations) == 0:
+        os.remove("temp_uploaded_image.jpg")
         raise HTTPException(status_code=400, detail="No face detected in the uploaded image.")
 
     user_face_encoding = face_recognition.face_encodings(user_image, user_face_locations)[0]
 
     # Compare with dataset encodings
     distances = face_recognition.face_distance(encodings, user_face_encoding)
-    best_match_index = np.argmin(distances)
-    similarity_percentage = (1 - distances[best_match_index]) * 100
+    similarity_percentages = (1 - distances) * 100
 
-    if similarity_percentage > 50:  # Match threshold set to 50%
-        matched_image_name = image_names[best_match_index]
-        matched_image_path = os.path.join(DATASET_PATH, matched_image_name)
+    os.remove("temp_uploaded_image.jpg")  # Clean up the temporary file
 
-        # Save the matched image in the output directory
-        matched_output_path = os.path.join(OUTPUT_DIR, "matched.jpg")
-        matched_image = Image.open(matched_image_path)
-        matched_image.save(matched_output_path)
+    # Get matches above the 50% threshold
+    matches = []
+    for i, similarity in enumerate(similarity_percentages):
+        if similarity > 50:  # Match threshold set to 50%
+            matches.append({
+                "image_name": image_names[i],
+                "similarity": f"{similarity:.2f}%"
+            })
 
+    if matches:
         return {
-            "message": "Match found!",
-            "matched_image_name": matched_image_name,
-            "similarity": f"{similarity_percentage:.2f}%",
-            "output_image_path": matched_output_path
+            "message": "Matches found!",
+            "matches": matches
         }
     else:
         return {
             "message": "No good match found in the dataset.",
-            "similarity": f"{similarity_percentage:.2f}%"
         }
