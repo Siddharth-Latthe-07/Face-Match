@@ -46,7 +46,7 @@ def update_encodings(dataset_path, encodings_file):
     return len(new_images), len(existing_images)
 
 # Endpoint to generate/update encodings
-@app.post("/generate-or-update-encodings")
+@app.post("/generate-encodings")
 async def generate_or_update_encodings_endpoint():
     new_count, existing_count = update_encodings(DATASET_PATH, ENCODINGS_FILE)
     return {
