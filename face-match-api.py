@@ -2,37 +2,58 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 import face_recognition
 import pickle
 import os
-import numpy as np
 
 app = FastAPI()
 
 DATASET_PATH = "/home/siddharth/Desktop/face_recg/dataset"  # Update this to your dataset path
 ENCODINGS_FILE = "encodings.pkl"
 
-# Utility to generate encodings
-def generate_encodings(dataset_path):
-    encodings = []
-    images = []
+# Utility function to update encodings
+def update_encodings(dataset_path, encodings_file):
+    # Load existing encodings if the file exists
+    if os.path.exists(encodings_file):
+        with open(encodings_file, "rb") as file:
+            data = pickle.load(file)
+        existing_encodings = data["encodings"]
+        existing_images = set(data["images"])  # Use a set for faster lookups
+    else:
+        existing_encodings = []
+        existing_images = set()
+
+    # Process new images
+    new_encodings = []
+    new_images = []
     for filename in os.listdir(dataset_path):
-        if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+        if filename.lower().endswith(('.jpg', '.jpeg', '.png')) and filename not in existing_images:
             image_path = os.path.join(dataset_path, filename)
             image = face_recognition.load_image_file(image_path)
             face_locations = face_recognition.face_locations(image)
             if face_locations:
                 face_encoding = face_recognition.face_encodings(image, face_locations)[0]
-                encodings.append(face_encoding)
-                images.append(filename)
+                new_encodings.append(face_encoding)
+                new_images.append(filename)
             else:
                 print(f"No face found in {filename}")
-    return encodings, images
 
-# Endpoint to generate encodings
-@app.post("/generate-encodings")
-async def generate_encodings_endpoint():
-    encodings, images = generate_encodings(DATASET_PATH)
-    with open(ENCODINGS_FILE, "wb") as file:
-        pickle.dump({"encodings": encodings, "images": images}, file)
-    return {"message": "Encodings generated and saved successfully!"}
+    # Append new data to the existing data
+    updated_encodings = existing_encodings + new_encodings
+    updated_images = list(existing_images) + new_images
+
+    # Save updated encodings back to the file
+    with open(encodings_file, "wb") as file:
+        pickle.dump({"encodings": updated_encodings, "images": updated_images}, file)
+
+    return len(new_images), len(existing_images)
+
+# Endpoint to generate/update encodings
+@app.post("/generate-or-update-encodings")
+async def generate_or_update_encodings_endpoint():
+    new_count, existing_count = update_encodings(DATASET_PATH, ENCODINGS_FILE)
+    return {
+        "message": "Encodings updated successfully!",
+        "new_images_processed": new_count,
+        "total_images_in_dataset": new_count + existing_count
+    }
 
 # Endpoint to upload and match
 @app.post("/upload-and-match")
